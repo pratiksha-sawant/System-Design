@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Engineering System Design — Tradeoff Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14202E; --paper:#F5F7F9; --card:#FFFFFF;
+    --teal:#0F8F6B; --teal-soft:#E2F4EE; --teal-ink:#0A5A43;
+    --coral:#D9602F; --coral-soft:#FBE9DF; --coral-ink:#8F3A16;
+    --amber:#BE7A12; --amber-soft:#FBF0DA;
+    --purple:#5B4FC4; --purple-soft:#ECEAFB;
+    --muted:#5C6773; --line:rgba(20,32,46,.10); --line2:rgba(20,32,46,.18);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif; line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:920px; margin:0 auto; padding:0 22px}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif; font-weight:700; line-height:1.15; margin:0}
+  a{color:var(--teal-ink)}
+  code,.mono{font-family:'JetBrains Mono',monospace}
+
+  /* hero */
+  header{padding:64px 0 40px; border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--coral); margin-bottom:14px}
+  h1{font-size:clamp(30px,5.4vw,48px); letter-spacing:-.02em}
+  .sub{font-size:18px; color:var(--muted); margin-top:14px; max-width:620px}
+  .heroband{margin-top:30px; height:10px; border-radius:6px;
+    background:linear-gradient(90deg,var(--teal) 0%,#9DBF5E 50%,var(--coral) 100%); position:relative}
+  .heroknob{position:absolute; top:50%; width:22px; height:22px; border-radius:50%;
+    background:var(--card); border:3px solid var(--ink); transform:translate(-50%,-50%); left:18%}
+  @media (prefers-reduced-motion:no-preference){
+    .heroknob{animation:drift 7s ease-in-out infinite}
+  }
+  @keyframes drift{0%,100%{left:14%}50%{left:62%}}
+
+  section{padding:46px 0; border-bottom:1px solid var(--line)}
+  .kicker{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--muted)}
+  h2{font-size:27px; letter-spacing:-.01em; margin:8px 0 6px}
+  .lead{color:var(--muted); max-width:680px; margin-bottom:8px}
+
+  .bigidea{background:var(--ink); color:#EAF0F4; border-radius:var(--r); padding:24px 26px; margin:22px 0 8px}
+  .bigidea b{color:#fff}
+  .bigidea .tag{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:#7FE3C2}
+
+  /* five step chain */
+  .chain{display:flex; flex-direction:column; gap:10px; margin-top:22px}
+  .step{display:flex; gap:16px; align-items:flex-start; background:var(--card);
+    border:1px solid var(--line); border-radius:var(--r); padding:16px 18px; cursor:pointer;
+    transition:border-color .15s, transform .12s}
+  .step:hover{border-color:var(--line2); transform:translateX(3px)}
+  .step .n{flex:none; width:34px; height:34px; border-radius:9px; display:grid; place-items:center;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; color:#fff; background:var(--purple)}
+  .step .t{font-weight:600}
+  .step .d{color:var(--muted); font-size:15px; margin-top:6px; display:none}
+  .step.open .d{display:block}
+  .step .chev{margin-left:auto; color:var(--muted); flex:none; transition:transform .2s; font-family:monospace}
+  .step.open .chev{transform:rotate(90deg)}
+
+  /* spectrum cards */
+  .spec{background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    padding:20px 22px; margin-bottom:16px}
+  .spec .head{display:flex; align-items:center; gap:10px; margin-bottom:4px}
+  .spec h3{font-size:18px}
+  .badge{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+    padding:3px 8px; border-radius:20px; font-weight:500}
+  .badge.done{background:var(--teal-soft); color:var(--teal-ink)}
+  .badge.next{background:var(--amber-soft); color:var(--amber)}
+  .poles{display:flex; justify-content:space-between; font-family:'Space Grotesk',sans-serif;
+    font-weight:500; font-size:14px; margin:14px 2px 6px}
+  .poles .l{color:var(--teal-ink)} .poles .r{color:var(--coral-ink)}
+  .slider{ -webkit-appearance:none; appearance:none; width:100%; height:10px; border-radius:6px;
+    background:linear-gradient(90deg,var(--teal),#9DBF5E 52%,var(--coral)); outline:none; cursor:pointer}
+  .slider::-webkit-slider-thumb{-webkit-appearance:none; width:24px; height:24px; border-radius:50%;
+    background:var(--card); border:3px solid var(--ink); cursor:grab}
+  .slider::-moz-range-thumb{width:20px; height:20px; border-radius:50%; background:var(--card);
+    border:3px solid var(--ink); cursor:grab}
+  .caption{font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--ink);
+    background:var(--paper); border:1px solid var(--line); border-radius:10px;
+    padding:8px 12px; margin-top:12px; min-height:20px}
+  .buypay{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+  .bp{border-radius:10px; padding:12px 14px; font-size:14px}
+  .bp.l{background:var(--teal-soft)} .bp.r{background:var(--coral-soft)}
+  .bp .k{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em;
+    text-transform:uppercase; display:block; margin-bottom:4px}
+  .bp.l .k{color:var(--teal-ink)} .bp.r .k{color:var(--coral-ink)}
+  @media(max-width:560px){.buypay{grid-template-columns:1fr}}
+
+  /* scenario flashcards */
+  .scn{background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+    padding:22px 24px; margin-bottom:18px}
+  .scn .lab{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--coral); margin-bottom:8px}
+  .scn .q{font-size:17px; font-weight:500; border-left:3px solid var(--amber); padding-left:14px; margin:6px 0 6px}
+  .ask{color:var(--muted); font-size:15px; margin:10px 0 16px}
+  .reveal{font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:14px; cursor:pointer;
+    background:var(--ink); color:#fff; border:none; border-radius:10px; padding:9px 16px}
+  .reveal:hover{background:#1f3144}
+  .answer{display:none; margin-top:18px}
+  .answer.show{display:block}
+  .answer ol{margin:0 0 16px; padding-left:20px}
+  .answer ol li{margin-bottom:7px}
+  .answer ol li b{color:var(--purple)}
+  .verdict{font-family:'JetBrains Mono',monospace; font-size:14px; line-height:1.7;
+    background:var(--ink); color:#EAF0F4; border-radius:12px; padding:16px 18px; margin-top:6px}
+  .verdict .hl{color:#7FE3C2}
+
+  .flow{margin:18px 0 6px}
+  .flow .cap{font-size:13px; color:var(--muted); margin-bottom:6px; font-family:'JetBrains Mono',monospace}
+
+  /* template */
+  .tmpl{background:var(--purple-soft); border-radius:var(--r); padding:20px 24px; margin-top:6px}
+  .tmpl .beat{display:flex; gap:12px; align-items:baseline; margin:8px 0}
+  .tmpl .beat .num{font-family:'JetBrains Mono',monospace; color:var(--purple); font-weight:500; flex:none}
+
+  /* progress + github */
+  .prog{display:flex; gap:8px; flex-wrap:wrap; margin:18px 0}
+  .pill{font-family:'JetBrains Mono',monospace; font-size:12px; padding:6px 12px; border-radius:20px; border:1px solid var(--line2)}
+  .pill.on{background:var(--teal-soft); color:var(--teal-ink); border-color:transparent}
+  .pill.off{color:var(--muted)}
+  .gh{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:18px 20px; margin-top:14px}
+  .gh pre{background:var(--ink); color:#D7E3EC; border-radius:10px; padding:14px 16px; overflow-x:auto;
+    font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.7}
+  footer{padding:34px 0 60px; color:var(--muted); font-size:14px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Session 01 · Latency spectrum · 30 Jun 2026</div>
+    <h1>Tradeoffs are the interview.</h1>
+    <p class="sub">Data engineering system design notes. Nobody fails for not knowing what Kafka is — they fail when asked "why that over the alternative?" and the answer goes mushy. These notes build the one muscle that fixes it.</p>
+    <div class="heroband"><div class="heroknob"></div></div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">The core idea</div>
+    <h2>Every design decision is a point on a spectrum</h2>
+    <p class="lead">The left pole is almost always cheaper and simpler. The right pole buys speed or flexibility, paid for with complexity or risk. Your job in the room: pick a point, name what you're buying and paying, and argue the trade fits the requirement.</p>
+
+    <div class="bigidea">
+      <div class="tag">The reframe that wins rounds</div>
+      <p style="margin:8px 0 0">The latency requirement is <b>not a property of the data</b> — it's a property of the <b>decision the data serves</b>. Same numbers, same dashboard: a retrospective decision tolerates a day of staleness; an in-flight decision tolerates minutes. When a stakeholder says "real-time," translate it into <i>what decision does this drive, and how fast must it arrive to support that decision?</i></p>
+    </div>
+
+    <div class="kicker" style="margin-top:30px">The repeatable method · tap each step</div>
+    <h2 style="font-size:21px; margin-top:8px">The five-step reasoning chain</h2>
+    <div class="chain" id="chain">
+      <div class="step"><div class="n">1</div><div><div class="t">Read the access pattern</div><div class="d">Who consumes this, how often, and what does it reflect? Let consumption drive architecture — not the buzzword in the request.</div></div><div class="chev">›</div></div>
+      <div class="step"><div class="n">2</div><div><div class="t">Interrogate the requirement</div><div class="d">Translate vague asks ("real-time") into the decision they serve, then into a concrete latency budget. Ask: "How late can the data be and still let you act in time?"</div></div><div class="chev">›</div></div>
+      <div class="step"><div class="n">3</div><div><div class="t">Place on the spectrum</div><div class="d">Pick the cheapest point that satisfies the decision. Watch both traps: don't over-reach to streaming, don't under-serve an in-flight need.</div></div><div class="chev">›</div></div>
+      <div class="step"><div class="n">4</div><div><div class="t">State the trade</div><div class="d">Name what you're buying and what you're paying — in one sentence each. You can't buy both poles on the same move.</div></div><div class="chev">›</div></div>
+      <div class="step"><div class="n">5</div><div><div class="t">Justify the trade</div><div class="d">Argue the payment is cheap given the requirement. This clause turns a tradeoff into a <i>defensible</i> tradeoff.</div></div><div class="chev">›</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">The map · drag a knob to feel the continuum</div>
+    <h2>The six recurring spectrums</h2>
+    <p class="lead">Almost every decision you'll defend lives on one of these. Buying and paying are different on each — don't borrow vocabulary across them.</p>
+
+    <div class="spec" data-id="latency">
+      <div class="head"><h3>Latency</h3><span class="badge done">Drilled</span></div>
+      <div class="poles"><span class="l">Batch</span><span class="r">Streaming</span></div>
+      <input type="range" class="slider" min="0" max="100" value="10">
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">Batch buys</span>Simplicity & low cost: one scheduled job, cheap compute, easy to debug and replay.</div>
+        <div class="bp r"><span class="k">Streaming buys</span>Freshness: seconds of latency — paid for with operational complexity and cost.</div>
+      </div>
+    </div>
+
+    <div class="spec" data-id="storage">
+      <div class="head"><h3>Storage layout</h3><span class="badge next">Next</span></div>
+      <div class="poles"><span class="l">Row store</span><span class="r">Columnar</span></div>
+      <input type="range" class="slider" min="0" max="100" value="50">
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">Row buys</span>Fast single-record reads/writes — great for OLTP & point lookups.</div>
+        <div class="bp r"><span class="k">Columnar buys</span>Fast scans & aggregation over few columns + compression — great for OLAP.</div>
+      </div>
+    </div>
+
+    <div class="spec" data-id="schema">
+      <div class="head"><h3>Schema</h3></div>
+      <div class="poles"><span class="l">Schema-on-write</span><span class="r">Schema-on-read</span></div>
+      <input type="range" class="slider" min="0" max="100" value="50">
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">On-write buys</span>Validation & reliability: bad data is rejected at ingest. Cost: rigidity, slower iteration.</div>
+        <div class="bp r"><span class="k">On-read buys</span>Flexibility: dump raw, interpret later. Cost: risk — quality issues surface downstream.</div>
+      </div>
+    </div>
+
+    <div class="spec" data-id="modeling">
+      <div class="head"><h3>Modeling</h3></div>
+      <div class="poles"><span class="l">Normalized</span><span class="r">Denormalized</span></div>
+      <input type="range" class="slider" min="0" max="100" value="50">
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">Normalized buys</span>No duplication, one source of truth, cheap writes. Cost: more joins, slower reads.</div>
+        <div class="bp r"><span class="k">Denormalized buys</span>Fast reads, fewer joins. Cost: duplicated data, harder/expensive updates.</div>
+      </div>
+    </div>
+
+    <div class="spec" data-id="pipeline">
+      <div class="head"><h3>Pipeline</h3></div>
+      <div class="poles"><span class="l">ETL</span><span class="r">ELT</span></div>
+      <input type="range" class="slider" min="0" max="100" value="50">
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">ETL buys</span>Clean, conformed data lands ready to use. Cost: rigid, transform logic upfront, reprocessing is costly.</div>
+        <div class="bp r"><span class="k">ELT buys</span>Load raw fast, transform in-warehouse on demand. Cost: raw storage + warehouse compute, governance harder.</div>
+      </div>
+    </div>
+
+    <div class="spec" data-id="consistency">
+      <div class="head"><h3>Consistency</h3></div>
+      <div class="poles"><span class="l">Strong</span><span class="r">Eventual</span></div>
+      <input type="range" class="slider" min="0" max="100" value="50">
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">Strong buys</span>Every read sees the latest write — correctness. Cost: higher latency, lower availability under partition.</div>
+        <div class="bp r"><span class="k">Eventual buys</span>Availability & low latency at scale. Cost: reads can be stale; app must tolerate it.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Deep dive · Latency · self-quiz</div>
+    <h2>Scenarios — try before you reveal</h2>
+    <p class="lead">Cover the answer, run the five steps out loud, then check yourself.</p>
+
+    <div class="scn">
+      <div class="lab">Scenario A · the original ask</div>
+      <div class="q">A mid-size e-commerce company wants a dashboard of total revenue by product category that the finance team checks each morning to see how yesterday went. They ask you to "make it real-time."</div>
+      <div class="ask">Run all five steps. Where does it land, and how do you handle "real-time"?</div>
+      <button class="reveal">Reveal reasoning</button>
+      <div class="answer">
+        <ol>
+          <li><b>Access pattern:</b> read once each morning, reflects yesterday — retrospective.</li>
+          <li><b>Interrogate:</b> ask "are you ever acting on this before the next day, or is the morning view of yesterday what you need?" — "real-time" collapses to "reliably updated by 8am."</li>
+          <li><b>Place:</b> Batch (far left). Daily scheduled job.</li>
+          <li><b>Trade:</b> buying simplicity & low cost; paying with freshness (always up to a day stale).</li>
+          <li><b>Justify:</b> staleness is free here — they only ever read yesterday's closed numbers.</li>
+        </ol>
+        <div class="flow" id="flowA"></div>
+        <div class="verdict">"I'd go batch — a daily scheduled job. I'm <span class="hl">buying</span> simplicity and low cost; I'm <span class="hl">paying</span> with up to a day of staleness. That's the right trade, because finance reads yesterday's closed numbers each morning, so staleness costs them nothing."</div>
+      </div>
+    </div>
+
+    <div class="scn">
+      <div class="lab">Scenario B · the twist</div>
+      <div class="q">Finance now runs intraday flash-sale promos. They want category revenue updating through the day so they can pull a promo that's losing money by mid-afternoon.</div>
+      <div class="ask">What changed in the requirement — and where does the answer move? (Trap: don't sprint to full streaming.)</div>
+      <button class="reveal">Reveal reasoning</button>
+      <div class="answer">
+        <ol>
+          <li><b>Access pattern:</b> read in-flight, during the day — the decision is now "kill this promo <i>now</i>."</li>
+          <li><b>Interrogate:</b> "If a promo starts tanking, how fast must you see it — within the hour? 15 min?" That answer is your latency budget.</li>
+          <li><b>Place:</b> Micro-batch — a job every 15–30 min. Cheapest point that supports "react within the hour"; keeps batch's replayable, debuggable model. Not full streaming.</li>
+          <li><b>Trade:</b> buying freshness (a day → ~30 min); paying with more compute, steady source-system load, and tighter operational requirements.</li>
+          <li><b>Justify:</b> the data now has a clock — info about a bleeding promo is worth a lot at 2pm, worthless at 6pm. But "within the hour" doesn't justify streaming's cost.</li>
+        </ol>
+        <div class="flow" id="flowB"></div>
+        <div class="verdict">"I'd move to micro-batch, every 15–30 min. I'm <span class="hl">buying</span> freshness — a day down to half an hour — because the decision is in-flight: stale data means lost money. I'm <span class="hl">paying</span> with more compute, steady source load, and tighter ops. I'd still avoid full streaming: 'react within the hour' doesn't justify the infrastructure."</div>
+      </div>
+    </div>
+
+    <div class="kicker" style="margin-top:30px">Say it like this in the room</div>
+    <h2 style="font-size:21px; margin-top:8px">The three-beat answer template</h2>
+    <div class="tmpl">
+      <div class="beat"><span class="num">→</span><div><b>What I chose.</b> "I'd go [point on spectrum]…"</div></div>
+      <div class="beat"><span class="num">→</span><div><b>What it buys / costs.</b> "…buying [X], paying with [Y]…"</div></div>
+      <div class="beat"><span class="num">→</span><div><b>Why it fits.</b> "…and that's the right trade, because [the payment is cheap given the requirement]."</div></div>
+      <p style="margin:14px 0 0; font-size:14px; color:var(--muted)">The third beat is what separates "I know the poles" from "I can defend a design." Most people stop after beat two.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Progress</div>
+    <h2>Spectrums covered</h2>
+    <div class="prog">
+      <span class="pill on">✓ Latency</span>
+      <span class="pill off">Storage layout</span>
+      <span class="pill off">Schema</span>
+      <span class="pill off">Modeling</span>
+      <span class="pill off">Pipeline</span>
+      <span class="pill off">Consistency</span>
+    </div>
+    <p class="lead">After all six: full end-to-end system design problems that force several spectrums at once.</p>
+
+    <div class="gh">
+      <h3 style="font-size:17px; margin-bottom:8px">Keep it on GitHub</h3>
+      <p style="margin:0 0 4px; font-size:15px; color:var(--muted)">This is a single self-contained file. Drop it in a repo; rename to <code>index.html</code> and enable GitHub Pages to view it live in a browser.</p>
+      <pre>git init de-interview-notes
+mv de-system-design-notes.html de-interview-notes/index.html
+cd de-interview-notes
+git add . && git commit -m "Session 01: latency spectrum"
+# create the repo on GitHub, then:
+git remote add origin https://github.com/&lt;you&gt;/de-interview-notes.git
+git push -u origin main</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Built session by session · each new session appends a spectrum deep-dive in this same format.</div>
+</footer>
+
+<script>
+  document.querySelectorAll('#chain .step').forEach(function(s){
+    s.addEventListener('click', function(){ s.classList.toggle('open'); });
+  });
+
+  document.querySelectorAll('.reveal').forEach(function(b){
+    b.addEventListener('click', function(){
+      var a = b.parentElement.querySelector('.answer');
+      var open = a.classList.toggle('show');
+      b.textContent = open ? 'Hide reasoning' : 'Reveal reasoning';
+    });
+  });
+
+  var captions = {
+    latency: function(v){
+      if(v<33) return 'Daily batch — cheapest, simplest, ~24h stale';
+      if(v<67) return 'Micro-batch — every 15–30 min, more compute & source load';
+      return 'Streaming — seconds of latency, complex & costly to operate';
+    },
+    storage: function(v){ return v<50 ? 'Leaning row — fast point reads/writes (OLTP)' : 'Leaning columnar — fast scans & compression (OLAP)'; },
+    schema: function(v){ return v<50 ? 'Leaning schema-on-write — validated & rigid' : 'Leaning schema-on-read — flexible but risky'; },
+    modeling: function(v){ return v<50 ? 'Leaning normalized — fewer dupes, more joins' : 'Leaning denormalized — fast reads, duplicated data'; },
+    pipeline: function(v){ return v<50 ? 'Leaning ETL — clean before load, rigid' : 'Leaning ELT — load raw, transform in-warehouse'; },
+    consistency: function(v){ return v<50 ? 'Leaning strong — correct, higher latency' : 'Leaning eventual — available, possibly stale'; }
+  };
+  document.querySelectorAll('.spec').forEach(function(spec){
+    var id = spec.dataset.id, s = spec.querySelector('.slider'), c = spec.querySelector('.caption');
+    function up(){ c.textContent = captions[id](+s.value); }
+    s.addEventListener('input', up); up();
+  });
+
+  function flow(stages, note, accent){
+    var W=680,H=150, n=stages.length, boxW=132, gap=(W-40-n*boxW)/(n-1), y=46, svg=[];
+    svg.push('<svg width="100%" viewBox="0 0 '+W+' '+H+'" role="img"><title>Pipeline flow</title>');
+    var x=20;
+    for(var i=0;i<n;i++){
+      var fill = (stages[i].hl? accent : '#FFFFFF');
+      var stroke = (stages[i].hl? accent : 'rgba(20,32,46,.28)');
+      var tcol = (stages[i].hl? '#FFFFFF' : '#14202E');
+      var scol = (stages[i].hl? 'rgba(255,255,255,.85)' : '#5C6773');
+      svg.push('<rect x="'+x+'" y="'+y+'" width="'+boxW+'" height="58" rx="11" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.5"/>');
+      svg.push('<text x="'+(x+boxW/2)+'" y="'+(y+25)+'" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="14" fill="'+tcol+'">'+stages[i].t+'</text>');
+      svg.push('<text x="'+(x+boxW/2)+'" y="'+(y+43)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="'+scol+'">'+stages[i].s+'</text>');
+      if(i<n-1){ var ax=x+boxW, ax2=ax+gap;
+        svg.push('<line x1="'+(ax+6)+'" y1="'+(y+29)+'" x2="'+(ax2-8)+'" y2="'+(y+29)+'" stroke="#9AA6B0" stroke-width="2"/>');
+        svg.push('<path d="M'+(ax2-12)+' '+(y+24)+' L'+(ax2-6)+' '+(y+29)+' L'+(ax2-12)+' '+(y+34)+'" fill="none" stroke="#9AA6B0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+      }
+      x += boxW+gap;
+    }
+    svg.push('<text x="'+(W/2)+'" y="124" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="'+accent+'">'+note+'</text>');
+    svg.push('</svg>');
+    return svg.join('');
+  }
+  document.getElementById('flowA').innerHTML =
+    '<div class="cap">Scenario A — daily batch</div>' +
+    flow([{t:'Source DB',s:'live orders'},{t:'Batch job',s:'runs nightly',hl:true},{t:'Warehouse',s:'columnar',hl:false},{t:'Dashboard',s:'read at 8am'}], 'runs 1× / day · ~24h stale · cheap', '#0F8F6B');
+  document.getElementById('flowB').innerHTML =
+    '<div class="cap">Scenario B — micro-batch</div>' +
+    flow([{t:'Source DB',s:'live orders'},{t:'Micro-batch',s:'every 15–30m',hl:true},{t:'Warehouse',s:'columnar'},{t:'Dashboard',s:'intraday'}], 'runs ~48× / day · ~30m fresh · more compute & load', '#D9602F');
+</script>
+</body>
+</html>
