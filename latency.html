@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Latency · Batch vs Streaming — DE Tradeoff Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14202E; --paper:#F5F7F9; --card:#FFFFFF;
+    --teal:#0F8F6B; --teal-soft:#E2F4EE; --teal-ink:#0A5A43;
+    --coral:#D9602F; --coral-soft:#FBE9DF; --coral-ink:#8F3A16;
+    --amber:#BE7A12; --purple:#5B4FC4; --purple-soft:#ECEAFB;
+    --muted:#5C6773; --line:rgba(20,32,46,.10); --line2:rgba(20,32,46,.18); --r:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif; line-height:1.65; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px; margin:0 auto; padding:0 22px}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif; font-weight:700; line-height:1.15; margin:0}
+  a{color:var(--teal-ink)}
+  code,.mono{font-family:'JetBrains Mono',monospace}
+
+  header{padding:40px 0 34px; border-bottom:1px solid var(--line)}
+  .back{font-family:'JetBrains Mono',monospace; font-size:13px; text-decoration:none;
+    color:var(--muted); display:inline-block; margin-bottom:18px}
+  .back:hover{color:var(--ink)}
+  .eyebrow{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--coral); margin-bottom:12px}
+  h1{font-size:clamp(28px,4.6vw,40px); letter-spacing:-.02em}
+  .sub{font-size:17px; color:var(--muted); margin-top:12px; max-width:620px}
+
+  section{padding:42px 0; border-bottom:1px solid var(--line)}
+  .kicker{font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--muted)}
+  h2{font-size:24px; letter-spacing:-.01em; margin:8px 0 6px}
+  .lead{color:var(--muted); max-width:680px; margin-bottom:8px}
+
+  .spec{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:20px 22px; margin-top:18px}
+  .poles{display:flex; justify-content:space-between; font-family:'Space Grotesk',sans-serif;
+    font-weight:500; font-size:15px; margin:6px 2px 6px}
+  .poles .l{color:var(--teal-ink)} .poles .r{color:var(--coral-ink)}
+  .slider{ -webkit-appearance:none; appearance:none; width:100%; height:10px; border-radius:6px;
+    background:linear-gradient(90deg,var(--teal),#9DBF5E 52%,var(--coral)); outline:none; cursor:pointer}
+  .slider::-webkit-slider-thumb{-webkit-appearance:none; width:24px; height:24px; border-radius:50%;
+    background:var(--card); border:3px solid var(--ink); cursor:grab}
+  .slider::-moz-range-thumb{width:20px; height:20px; border-radius:50%; background:var(--card); border:3px solid var(--ink)}
+  .ticks{display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace;
+    font-size:11px; color:var(--muted); margin-top:7px}
+  .caption{font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--ink);
+    background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-top:12px}
+  .buypay{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+  .bp{border-radius:10px; padding:12px 14px; font-size:14px}
+  .bp.l{background:var(--teal-soft)} .bp.r{background:var(--coral-soft)}
+  .bp .k{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em;
+    text-transform:uppercase; display:block; margin-bottom:4px}
+  .bp.l .k{color:var(--teal-ink)} .bp.r .k{color:var(--coral-ink)}
+  @media(max-width:560px){.buypay{grid-template-columns:1fr}}
+
+  .scn{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:22px 24px; margin-bottom:18px}
+  .scn .lab{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--coral); margin-bottom:8px}
+  .scn .q{font-size:17px; font-weight:500; border-left:3px solid var(--amber); padding-left:14px; margin:6px 0 6px}
+  .ask{color:var(--muted); font-size:15px; margin:10px 0 16px}
+  .reveal{font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:14px; cursor:pointer;
+    background:var(--ink); color:#fff; border:none; border-radius:10px; padding:9px 16px}
+  .reveal:hover{background:#1f3144}
+  .answer{display:none; margin-top:18px}
+  .answer.show{display:block}
+  .answer ol{margin:0 0 16px; padding-left:20px}
+  .answer ol li{margin-bottom:7px}
+  .answer ol li b{color:var(--purple)}
+  .verdict{font-family:'JetBrains Mono',monospace; font-size:14px; line-height:1.7;
+    background:var(--ink); color:#EAF0F4; border-radius:12px; padding:16px 18px; margin-top:6px}
+  .verdict .hl{color:#7FE3C2}
+  .flow{margin:18px 0 6px}
+  .flow .cap{font-size:13px; color:var(--muted); margin-bottom:6px; font-family:'JetBrains Mono',monospace}
+
+  .tmpl{background:var(--purple-soft); border-radius:var(--r); padding:20px 24px; margin-top:6px}
+  .tmpl .beat{display:flex; gap:12px; align-items:baseline; margin:8px 0}
+  .tmpl .beat .num{font-family:'JetBrains Mono',monospace; color:var(--purple); font-weight:500; flex:none}
+  footer{padding:34px 0 60px; color:var(--muted); font-size:14px}
+  footer a{font-family:'JetBrains Mono',monospace; text-decoration:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="back" href="index.html">← All spectrums</a>
+    <div class="eyebrow">Spectrum 01 · Session 01</div>
+    <h1>Latency — batch vs streaming</h1>
+    <p class="sub">The most over-reached-for decision in the field. The left pole is almost always right for human-read dashboards; the trap is sprinting to the right because someone said "real-time."</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">The spectrum · drag to move between the stops</div>
+    <h2>Where does it land?</h2>
+    <div class="spec" data-id="latency">
+      <div class="poles"><span class="l">Batch</span><span class="r">Streaming</span></div>
+      <input type="range" class="slider" min="0" max="100" value="10">
+      <div class="ticks"><span>Daily batch</span><span>Micro-batch</span><span>Streaming</span></div>
+      <div class="caption"></div>
+      <div class="buypay">
+        <div class="bp l"><span class="k">Batch buys</span>Simplicity & low cost: one scheduled job, cheap compute, replayable, easy to debug. Pays with staleness.</div>
+        <div class="bp r"><span class="k">Streaming buys</span>Freshness — seconds of latency. Pays with operational complexity, steady cost, harder failure modes.</div>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">Most things people <i>call</i> "real-time dashboards" are <b>micro-batch</b> underneath — a batch job on a short interval. It keeps batch's simple, replayable model while getting freshness down to minutes. True streaming is rarely needed for a human reading a screen.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Self-quiz · cover the answer, run the five steps, then reveal</div>
+    <h2>Scenarios</h2>
+
+    <div class="scn">
+      <div class="lab">Scenario A · the original ask</div>
+      <div class="q">A mid-size e-commerce company wants a dashboard of total revenue by product category that the finance team checks each morning to see how yesterday went. They ask you to "make it real-time."</div>
+      <div class="ask">Run all five steps. Where does it land, and how do you handle "real-time"?</div>
+      <button class="reveal">Reveal reasoning</button>
+      <div class="answer">
+        <ol>
+          <li><b>Access pattern:</b> read once each morning, reflects yesterday — retrospective.</li>
+          <li><b>Interrogate:</b> ask "are you ever acting on this before the next day, or is the morning view of yesterday what you need?" — "real-time" collapses to "reliably updated by 8am."</li>
+          <li><b>Place:</b> Batch (far left). Daily scheduled job.</li>
+          <li><b>Trade:</b> buying simplicity & low cost; paying with freshness (always up to a day stale).</li>
+          <li><b>Justify:</b> staleness is free here — they only ever read yesterday's closed numbers.</li>
+        </ol>
+        <div class="flow" id="flowA"></div>
+        <div class="verdict">"I'd go batch — a daily scheduled job. I'm <span class="hl">buying</span> simplicity and low cost; I'm <span class="hl">paying</span> with up to a day of staleness. That's the right trade, because finance reads yesterday's closed numbers each morning, so staleness costs them nothing."</div>
+      </div>
+    </div>
+
+    <div class="scn">
+      <div class="lab">Scenario B · the twist</div>
+      <div class="q">Finance now runs intraday flash-sale promos. They want category revenue updating through the day so they can pull a promo that's losing money by mid-afternoon.</div>
+      <div class="ask">What changed in the requirement — and where does the answer move? (Trap: don't sprint to full streaming.)</div>
+      <button class="reveal">Reveal reasoning</button>
+      <div class="answer">
+        <ol>
+          <li><b>Access pattern:</b> read in-flight, during the day — the decision is now "kill this promo <i>now</i>."</li>
+          <li><b>Interrogate:</b> "If a promo starts tanking, how fast must you see it — within the hour? 15 min?" That answer is your latency budget.</li>
+          <li><b>Place:</b> Micro-batch — every 15–30 min. Cheapest point that supports "react within the hour"; keeps batch's replayable, debuggable model. Not full streaming.</li>
+          <li><b>Trade:</b> buying freshness (a day → ~30 min); paying with more compute, steady source-system load, and tighter operational requirements.</li>
+          <li><b>Justify:</b> the data now has a clock — info about a bleeding promo is worth a lot at 2pm, worthless at 6pm. But "within the hour" doesn't justify streaming's cost.</li>
+        </ol>
+        <div class="flow" id="flowB"></div>
+        <div class="verdict">"I'd move to micro-batch, every 15–30 min. I'm <span class="hl">buying</span> freshness — a day down to half an hour — because the decision is in-flight: stale data means lost money. I'm <span class="hl">paying</span> with more compute, steady source load, and tighter ops. I'd still avoid full streaming: 'react within the hour' doesn't justify the infrastructure."</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Say it like this in the room</div>
+    <h2>The three-beat answer template</h2>
+    <div class="tmpl">
+      <div class="beat"><span class="num">→</span><div><b>What I chose.</b> "I'd go [point on spectrum]…"</div></div>
+      <div class="beat"><span class="num">→</span><div><b>What it buys / costs.</b> "…buying [X], paying with [Y]…"</div></div>
+      <div class="beat"><span class="num">→</span><div><b>Why it fits.</b> "…and that's the right trade, because [the payment is cheap given the requirement]."</div></div>
+      <p style="margin:14px 0 0; font-size:14px; color:var(--muted)">The third beat is what separates "I know the poles" from "I can defend a design." Most people stop after beat two.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap"><a href="index.html">← Back to all spectrums</a> · next up: storage layout (row vs columnar)</div>
+</footer>
+
+<script>
+  document.querySelectorAll('.reveal').forEach(function(b){
+    b.addEventListener('click', function(){
+      var a = b.parentElement.querySelector('.answer');
+      var open = a.classList.toggle('show');
+      b.textContent = open ? 'Hide reasoning' : 'Reveal reasoning';
+    });
+  });
+  var spec = document.querySelector('.spec[data-id="latency"]');
+  if(spec){ var s=spec.querySelector('.slider'), c=spec.querySelector('.caption');
+    function up(){ var v=+s.value;
+      c.textContent = v<33 ? 'Daily batch — cheapest, simplest, ~24h stale'
+        : v<67 ? 'Micro-batch — every 15–30 min, more compute & source load'
+        : 'Streaming — seconds of latency, complex & costly to operate'; }
+    s.addEventListener('input', up); up();
+  }
+  function flow(stages, note, accent){
+    var W=680,H=150,n=stages.length,boxW=132,gap=(W-40-n*boxW)/(n-1),y=46,svg=[];
+    svg.push('<svg width="100%" viewBox="0 0 '+W+' '+H+'" role="img"><title>Pipeline flow</title>');
+    var x=20;
+    for(var i=0;i<n;i++){
+      var fill=stages[i].hl?accent:'#FFFFFF', stroke=stages[i].hl?accent:'rgba(20,32,46,.28)';
+      var tcol=stages[i].hl?'#FFFFFF':'#14202E', scol=stages[i].hl?'rgba(255,255,255,.85)':'#5C6773';
+      svg.push('<rect x="'+x+'" y="'+y+'" width="'+boxW+'" height="58" rx="11" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.5"/>');
+      svg.push('<text x="'+(x+boxW/2)+'" y="'+(y+25)+'" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="14" fill="'+tcol+'">'+stages[i].t+'</text>');
+      svg.push('<text x="'+(x+boxW/2)+'" y="'+(y+43)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="10.5" fill="'+scol+'">'+stages[i].s+'</text>');
+      if(i<n-1){ var ax2=x+boxW+gap;
+        svg.push('<line x1="'+(x+boxW+6)+'" y1="'+(y+29)+'" x2="'+(ax2-8)+'" y2="'+(y+29)+'" stroke="#9AA6B0" stroke-width="2"/>');
+        svg.push('<path d="M'+(ax2-12)+' '+(y+24)+' L'+(ax2-6)+' '+(y+29)+' L'+(ax2-12)+' '+(y+34)+'" fill="none" stroke="#9AA6B0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+      }
+      x+=boxW+gap;
+    }
+    svg.push('<text x="'+(W/2)+'" y="124" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" fill="'+accent+'">'+note+'</text></svg>');
+    return svg.join('');
+  }
+  document.getElementById('flowA').innerHTML='<div class="cap">Scenario A — daily batch</div>'+
+    flow([{t:'Source DB',s:'live orders'},{t:'Batch job',s:'runs nightly',hl:true},{t:'Warehouse',s:'columnar'},{t:'Dashboard',s:'read at 8am'}],'runs 1× / day · ~24h stale · cheap','#0F8F6B');
+  document.getElementById('flowB').innerHTML='<div class="cap">Scenario B — micro-batch</div>'+
+    flow([{t:'Source DB',s:'live orders'},{t:'Micro-batch',s:'every 15–30m',hl:true},{t:'Warehouse',s:'columnar'},{t:'Dashboard',s:'intraday'}],'runs ~48× / day · ~30m fresh · more compute & load','#D9602F');
+</script>
+</body>
+</html>
